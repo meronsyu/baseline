@@ -6,14 +6,28 @@
 #SBATCH --nodelist=osk-gpu[85]
 #SBATCH --cpus-per-task=240
 #SBATCH --time=50:00:00
-#SBATCH --output=~/baseline/train/logs/%x-%j.out
-#SBATCH --error=~/baseline/train/logs/%x-%j.out
-
-
-################################################################################
+#SBATCH --output=/home/Competition2025/P12/P12U007/baseline/train/logs/output.out
+#SBATCH --error=/home/Competition2025/P12/P12U007/baseline/train/logs/error.out
 
 ################################################################################
-
+# スクリプト名: sft_qwen32b.sh
+# 概要:
+#   Qwen-3 32Bモデルに対し、教師ありファインチューニング（SFT）を行うための
+#   SBATCHジョブスクリプト。
+#
+# 目的:
+#   数学問題（MATHデータセット）を用いてモデルの推論能力を向上させる。
+#   学習後、Hugging Faceフォーマットに変換し、オプションでHugging Face Hubにアップロードする。
+#
+# 前提条件:
+#   - torchrun、verlなどの必要なライブラリが環境にインストールされていること。
+#   - Qwen3-32Bモデルのベースモデルが$HOME/model/Qwen3-32Bに存在すること。
+#   - 学習データが$HOME/data/math/に存在すること。
+#   - Hugging Face Hubへのアップロードには、HF_TOKEN環境変数が設定されていること。
+#
+# 実行方法:
+#   sbatch sft_qwen32b.sh
+################################################################################
 
 
 # 現在のモジュール環境をリセットする（読み込まれている全てのモジュールをアンロード）
@@ -63,8 +77,14 @@ pid_nvsmi=$!
 # エラー時に停止
 set -e
 
-# Step 1-4: 強化学習（GRPO）の実行
-echo "=== Step 1-4: GRPO Training ==="
+# Step 1: SFT（教師ありファインチューニング）の実行
+echo "=== Step 1: Supervised Fine-Tuning (SFT) ==="
+
+# ディレクトリ作成（パス統一）
+# SFTのチェックポイントを保存するためのディレクトリ
+mkdir -p ~/training/sft_Qwen3_math
+mkdir -p ~/training/sft_Qwen3_math/checkpoints
+cd ~/training/sft_Qwen3_math
 
 # 基本的なネットワーク設定
 export NCCL_SOCKET_IFNAME=enp25s0np0
@@ -74,32 +94,15 @@ unset ROCR_VISIBLE_DEVICES
 ulimit -v unlimited
 ulimit -m unlimited
 
-# Ray クラスターの起動
-echo "Starting Ray cluster..."
-ray stop  # 既存のRayプロセスを停止
-# Rayのヘッドノードを起動
-# --num-cpusはノードのCPU数に合わせて調整
-# --num-gpusは使用するGPUの数に合わせて調整
-ray start --head --port=6379 --num-cpus=240 --num-gpus=8
-echo "Ray cluster started"
-
-# ファインチューニングの実行
-mkdir -p ~/training/sft
-mkdir -p ~/training/sft/checkpoints
-cd ~/training/sft
-
-#YOU_TEAM を wandb の組織名に置き換えてください。
+# WandBのプロジェクト設定
 export WANDB_ENTITY="catnyancat"
-export WANDB_PROJECT_NAME="Qwen3_32B_SFT+GRPO"
+export WANDB_PROJECT_NAME="Qwen3_32B_SFT"
 export WANDB_RUN_NAME="Qwen3_32B_SFT_MATH"
 
-echo "Starting GRPO training..."
+echo "Starting SFT training..."
 
-# GRPO学習実行
-# actor_rollout_ref.model.pathを学習したいモデルに変更してください
-
-Bunemonさんを参照
-```python
+# SFT学習実行
+# torchrunを使用して、verlのfsdp_sft_trainerを8GPUで実行
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 torchrun --standalone --nnodes=1 --nproc_per_node=8 \
@@ -118,25 +121,21 @@ torchrun --standalone --nnodes=1 --nproc_per_node=8 \
   model.use_liger=True \
   model.fsdp_config.model_dtype=bfloat16 \
   model.enable_gradient_checkpointing=true \
-  trainer.project_name=competition_verl_baseline \
-  trainer.experiment_name=Qwen3-32B_SFT_math \
+  trainer.project_name=$WANDB_PROJECT_NAME \
+  trainer.experiment_name=$WANDB_RUN_NAME \
   trainer.total_epochs=4 \
   trainer.default_local_dir=$HOME/training/sft_Qwen3_math/checkpoints \
   trainer.logger=['console','wandb'] \
-  trainer.resume_mode=disable
-  trainer.total_epochs=15 2>&1 | tee verl_grpo.log
-```
+  trainer.resume_mode=disable \
+  trainer.total_epochs=15 2>&1 | tee verl_sft.log
 
+echo "SFT training completed"
 
-
-
-echo "GRPO training completed"
-
-# Step 1-5: チェックポイントの変換
-echo "=== Step 1-5: Converting checkpoint to HuggingFace format ==="
+# Step 2: チェックポイントの変換
+echo "=== Step 2: Converting checkpoint to HuggingFace format ==="
 
 # 最新のチェックポイントを探す
-LATEST_CHECKPOINT=$(find $HOME/training/sft_grpo_001/checkpoints -name "global_step_*" -type d | sort -V | tail -1)
+LATEST_CHECKPOINT=$(find $HOME/training/sft_Qwen3_math/checkpoints -name "global_step_*" -type d | sort -V | tail -1)
 if [ -z "$LATEST_CHECKPOINT" ]; then
     echo "No checkpoint found!"
     exit 1
@@ -146,31 +145,30 @@ echo "Converting checkpoint: $LATEST_CHECKPOINT"
 
 python -m verl.model_merger merge \
     --backend fsdp \
-    --local_dir $LATEST_CHECKPOINT/actor \
-    --target_dir $LATEST_CHECKPOINT/actor/huggingface
+    --local_dir $LATEST_CHECKPOINT \
+    --target_dir $LATEST_CHECKPOINT/huggingface
 
 echo "Checkpoint conversion completed"
 
-# Step 1-6: モデルのアップロード（オプション）
-echo "=== Step 1-6: Model upload (optional) ==="
+# Step 3: モデルのアップロード（オプション）
+echo "=== Step 3: Model upload (optional) ==="
 
 # HF_TOKENが設定されている場合は自動アップロード
 if [ -n "$HF_TOKEN" ]; then
     echo "Uploading model to HuggingFace Hub..."
     huggingface-cli upload \
-        Ta1k1/Qwen3-32B-SFT-GRPO \
-        $LATEST_CHECKPOINT/actor/huggingface \
+        Ta1k1/Qwen3-32B-SFT-MATH \
+        $LATEST_CHECKPOINT/huggingface \
         --token $HF_TOKEN
     echo "Model upload completed"
 else
     echo "HF_TOKEN not set. Upload manually if needed:"
-    echo "huggingface-cli upload Ta1k1/Qwen3-32B-SFT-GRPO $LATEST_CHECKPOINT/actor/huggingface --token YOUR_TOKEN"
+    echo "huggingface-cli upload Ta1k1/Qwen3-32B-SFT-MATH $LATEST_CHECKPOINT/huggingface --token YOUR_TOKEN"
 fi
 
-echo "=== GRPO Full Pipeline Completed ==="
+# GPU監視プロセスを終了
+kill $pid_nvsmi
+
+echo "=== SFT Full Pipeline Completed ==="
 echo "End time: $(date)"
-echo "Checkpoint location: $LATEST_CHECKPOINT/actor/huggingface"
-
-
-
-
+echo "Checkpoint location: $LATEST_CHECKPOINT/huggingface"

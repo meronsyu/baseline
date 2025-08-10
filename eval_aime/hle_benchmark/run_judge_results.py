@@ -243,12 +243,12 @@ def main(args):
     
     assert args.num_workers > 1, "num_workers must be 2 or greater"
 
-    output_filepath = f"judged/judged_AIME_{os.path.basename(args.model)}.json"   
+    output_filepath = f"judged/aime/judged_qwen3-32B.json"   
     if args.dataset == "opencompass/AIME2025":
         dataset_a = load_dataset(args.dataset, "AIME2025-I", split="test")
         dataset_b = load_dataset(args.dataset, "AIME2025-II", split="test")
         dataset = concatenate_datasets([dataset_a,dataset_b])
-        dataset = dataset.select(range(3))
+        # dataset = dataset.select(range(3))
     dataset = dataset.to_dict()
     
 
@@ -266,9 +266,8 @@ def main(args):
     os.makedirs(output_dir, exist_ok=True) 
 
     # todo:今回カテゴリごとにばらばらに予測を行ったから貼り付ける必要あり。
-    with open(f"predictions/hle_Qwen3-32B_20250805_193609.json", "r") as f:
+    with open(f"predictions/aime/Qwen3-32B.json", "r") as f:
         predictions = json.load(f)
-        
 
      # load only unjudged responses
     # if os.path.exists(output_filepath):

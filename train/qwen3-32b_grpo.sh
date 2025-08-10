@@ -6,9 +6,8 @@
 #SBATCH --nodelist=osk-gpu[85]
 #SBATCH --cpus-per-task=240
 #SBATCH --time=50:00:00
-#SBATCH --output=~/baseline/train/logs/%x-%j.out
-#SBATCH --error=~/baseline/train/logs/%x-%j.out
-
+#SBATCH --output=/home/Competition2025/P12/P12U007/baseline/train/logs/output.out
+#SBATCH --error=/home/Competition2025/P12/P12U007/baseline/train/logs/error.out
 
 ################################################################################
 # スクリプト名: qwen3-32b_grpo.sh
@@ -32,8 +31,6 @@
 # 作成者: Metokiさんを参考にさせていただきました。
 # 作成日: 2025-08-10
 ################################################################################
-
-
 
 # 現在のモジュール環境をリセットする（読み込まれている全てのモジュールをアンロード）
 module reset

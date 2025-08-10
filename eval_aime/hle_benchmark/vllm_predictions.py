@@ -116,7 +116,7 @@ async def attempt_all(args, questions, predictions, output_filepath):
                     with open(output_filepath, "w") as f:
                         json.dump(predictions, f, indent=4)
                     print(f"Saved progress: {completed_count} items completed")
-    
+                    
     return results
 
 
@@ -150,13 +150,13 @@ def main(args: Config):
         questions = questions[:args.max_samples]
 
     
-    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # ファイル名にモデル名とタイムスタンプを組み込む
     # 例: predictions/hle_qwen3-32b_20250731_023309.json
     # 複数の実行で衝突が起きないようにするため
-    output_filepath = f"predictions/hle_{os.path.basename(args.model)}_{timestamp_str}.json"
-
+    # output_filepath = f"predictions/hle_{os.path.basename(args.model)}_{timestamp_str}.json"
+    output_filepath = f"predictions/aime/Qwen3-32B.json"
     # もしディレクトリがない場合は作成
     output_dir = os.path.dirname(output_filepath)
     if not os.path.exists(output_dir):

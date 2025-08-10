@@ -1,36 +1,49 @@
 # baseline
-8/10までで完成しているベースラインです。
+8/11までで完成しているベースラインです。ぜひ修正、追加してください。
+GPU8枚での起動を想定しています。枚数を変化させる場合は、個人で変更してください
 
 <コードの構成>
 ```bash
 baseline
-├── [ 4.0K]  eval_aime
-│   ├── [  344]  aime_prediction.sh
-│   ├── [ 1.8K]  aime_script.sh
-│   ├── [ 4.0K]  conf
-│   ├── [ 4.0K]  hle_benchmark
-│   │   
-│   ├── [ 4.0K]  judged
-│   ├── [ 4.0K]  leaderboard
-│   ├── [ 4.0K]  notebooks
-│   ├── [ 4.0K]  outputs
-│   ├── [ 4.0K]  predictions
-│   └── [  118]  requirements.txt
-├── [ 4.0K]  eval_hle
-│   ├── [ 4.0K]  conf
-│   ├── [ 4.0K]  hle_benchmark
-│   │   
-│   ├── [  344]  hle_prediction.sh
-│   ├── [ 1.8K]  hle_script.sh
-│   ├── [ 4.0K]  judged
-│   ├── [ 4.0K]  leaderboard
-│   ├── [ 4.0K]  notebooks
-│   ├── [ 4.0K]  outputs
-│   ├── [ 4.0K]  predictions
-│   └── [  118]  requirements.txt
-└── [ 4.0K]  train
-    ├── [ 3.9K]  qwen3-32b_grpo.sh
-    └── [ 5.0K]  qwen3-32b_ssh.sh
+.
+├── data
+│   └── install_MATH.py
+├── eval_aime
+│   ├── aime_prediction.sh
+│   ├── aime_script.sh
+│   ├── conf
+│   ├── hle_benchmark
+│   │   ├── _configs.py
+│   │   ├── __init__.py
+│   │   ├── ollama_predictions.py
+│   │   ├── openai_predictions.py
+│   │   ├── __pycache__
+│   │   ├── run_judge_results.py
+│   │   └── vllm_predictions.py
+│   ├── judge.py
+│   ├── logs
+│   ├── notebooks
+│   └── predict.py
+├── eval_hle
+│   ├── conf
+│   ├── hle_benchmark
+│   │   ├── _configs.py
+│   │   ├── __init__.py
+│   │   ├── ollama_predictions.py
+│   │   ├── openai_predictions.py
+│   │   ├── __pycache__
+│   │   ├── run_judge_results.py
+│   │   └── vllm_predictions.py
+│   ├── hle_prediction.sh
+│   ├── hle_script.sh
+│   ├── judge.py
+│   ├── logs
+│   ├── notebooks
+│   └── predict.py
+├── sequence
+└── train
+    ├── qwen3-32b_grpo.sh
+    └── qwen3-32b_sft.sh
  ```
 
 
@@ -79,9 +92,20 @@ baseline
     ```bash
     python data/install_MATH.py
     ```
+3.  **logを補完するディレクトリ作成**:
+    ```bash
+    mkdir -p ~/baseline/eval_hle/logs
+    mkdir -p ~/baseline/eval_aime/logs
+    ```
+4.  **.shのログの書き出し位置を変更**:
+    P12U007を変更してください。
+    ```bash
+    #SBATCH --output=/home/Competition2025/P12/P12U007/baseline/eval_hle/logs/output.out
+    #SBATCH --error=/home/Competition2025/P12/P12U007/baseline/eval_hle/logs/error.out  
+    ```
 
-### 段階 2: モデル学習
-
+### 段階 2: モデル学習(動作未確認)
+#### 方法1: 自動実行（未確認/方法２で実行する方がいいと思います）
 ここでは、SFTとGRPOの2段階でモデルをファインチューニングします。WandBとHugging Faceの設定が必要です。
 
 1.  **SFT（教師あり学習）**:
@@ -89,7 +113,7 @@ baseline
     * **事前準備**: `train/qwen3-32b_sft.sh`内の`HF_TOKEN`, `WANDB_ENTITY`, `WANDB_PROJECT_NAME`を設定します。
     * **実行**:
         ```bash
-        sbatch train/qwen3-32b_sft.sh
+        cd && bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && sbatch $HOME/baseline/train/qwen3-32b_sft.sh
         ```
     * **結果**: 学習済みモデルのチェックポイントが`~/training/sft/checkpoints/`に生成されます。
 2.  **GRPO（強化学習）**:
@@ -97,38 +121,101 @@ baseline
     * **事前準備**: `train/qwen3-32b_grpo.sh`内の`HF_TOKEN`, `WANDB_ENTITY`, `WANDB_PROJECT_NAME`を設定します。また、**SFTで生成されたチェックポイントパスを`qwen3-32b_grpo.sh`内の`actor_rollout_ref.model.path`に設定**する必要があります。
     * **実行**:
         ```bash
-        sbatch train/qwen3-32b_grpo.sh
+        cd && bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && sbatch $HOME/baseline/train/qwen3-32b_grpo.sh
         ```
     * **結果**: GRPO学習後のチェックポイントが`~/training/sft_grpo_001/checkpoints/`に生成されます。
+#### 方法2: bashに入って実行
+.shのコードを別々に実行します。
+
+0.  **準備**:
+    bashではいる
+    ```bash
+    bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && srun --job-name=evaluate --partition P12 --nodes=1 --nodelist osk-gpu[86] --gpus-per-node=4 --ntasks=16 --time=12:00:00 --pty bash -i
+    ```
+    おまじない
+    ```bash
+    export NCCL_SOCKET_IFNAME=enp25s0np0
+    export NVTE_FUSED_ATTN=0
+    #CUDA_VISIBLE_DEVICESでトレーニングに使用するGPUの数を制御します。
+    #例えば、単一GPUの場合は以下のように設定します：
+    #export CUDA_VISIBLE_DEVICES=0
+    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+    #※AMD製のGPUではないため、ROCR_VISIBLE_DEVICES を指定しないようにしてください。指定するとエラーになります。
+    unset ROCR_VISIBLE_DEVICES
+    ulimit -v unlimited
+    ulimit -m unlimited
+    ```
+    conda activate
+    ```bash
+    export CONDA_PATH="~/conda_env"
+    conda activate $CONDA_PATH
+    ```
+    認証系
+    ```bash
+    export HF_TOKEN=<Huggingfaceのトークン>
+    export HF_HOME=${SLURM_TMPDIR:-$HOME}/.hf_cache
+    export TRANSFORMERS_CACHE=$HF_HOME
+    export HUGGINGFACE_HUB_TOKEN=$HF_TOKEN
+    mkdir -p "$HF_HOME"
+    echo "HF cache dir : $HF_HOME"   
+    # WandBのプロジェクト設定
+    export WANDB_ENTITY=<自分の名前>
+    export WANDB_PROJECT_NAME="Qwen3_32B_SFT"
+    export WANDB_RUN_NAME="Qwen3_32B_SFT_MATH"
+    ```
+   
+1.  **torchrunの実行**:
+2.  **チェックポイントの変換**:
+3.  **モデルのアップロード(suzaku/好きな名前)**:
+
+---
 
 ### 段階 3: 評価実行
 
-学習済みのモデルをAIMEとHLEのベンチマークで評価します。
+学習済みのモデルをAIMEとHLE200問(178)のベンチマークで評価します。
 
-#### 方法1: 自動実行（推奨）
+#### 方法1: 自動実行（一連の動作確認済み）
 
 この方法では、`vLLM`サーバーの起動から予測、サーバーの終了までが自動で行われます。
-* **AIME評価**: `sbatch eval_aime/aime_script.sh`
-* **HLE評価**: `sbatch eval_hle/hle_script.sh`
+* **AIME評価**: `cd && bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && sbatch $HOME/baseline/eval_aime/aime_script.sh`
+* **HLE評価**: `cd && bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && sbatch $HOME/baseline/eval_hle/hle_script.sh`
 
-#### 方法2: 手動実行
+logs/output.outに結果が出力されます。また$HOME/judged、$HOME/leaderboard、$HOME/predictionsに結果が格納されます。
+
+#### 方法2: bashに入って実行
 
 vLLMサーバーを個別に管理し、予測と評価を別々に実行します。
-1.  **vLLMサーバーの起動**:
-    `eval_aime/`または`eval_hle/`に移動し、`hle_script.sh`または`aime_script.sh`を開き、`vllm serve`コマンドを実行します。
+0.  **準備**:
     ```bash
-    cd eval_aime
-    # vllm serveコマンドを直接実行
+    bash ../shareP12/scancel_hatakeyama.sh gpu84 gpu85 gpu86 && srun --job-name=evaluate --partition P12 --nodes=1 --nodelist osk-gpu[86] --gpus-per-node=4 --ntasks=16 --time=12:00:00 --pty bash -i
+    ```
+    ```bash
+    export NCCL_SOCKET_IFNAME=enp25s0np0
+    export NVTE_FUSED_ATTN=0
+    #CUDA_VISIBLE_DEVICESでトレーニングに使用するGPUの数を制御します。
+    #例えば、単一GPUの場合は以下のように設定します：
+    #export CUDA_VISIBLE_DEVICES=0
+    export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+    #※AMD製のGPUではないため、ROCR_VISIBLE_DEVICES を指定しないようにしてください。指定するとエラーになります。
+    unset ROCR_VISIBLE_DEVICES
+
+    ulimit -v unlimited
+    ulimit -m unlimited
+    ```
+1.  **vLLMサーバーの起動**:
+    `eval_aime/`または`eval_hle/`に移動し、`hle_script.sh`または`aime_script.sh`を実行しvllmサーバを起動
+    ```bash
+    nohup ./hle_script.sh > vllm.log 2>&1 &
     ```
 2.  **予測の実行**:
-    サーバーが起動したら、`aime_prediction.sh`または`hle_prediction.sh`を実行します。
+    サーバーが起動したら、`aime_prediction.sh`または`hle_prediction.sh`を実行しタスクの推論を開始
     ```bash
-    sbatch aime_prediction.sh
+    nohup ./hle_prediction.sh > prediction.log 2>&1 &
     ```
 3.  **結果の評価**:
-    予測が完了したら、`judge.py`を実行して評価結果を出力します。
+    予測が完了したら、`judge.py`を実行して評価結果を出力
     ```bash
-    python judge.py
+    OPENAI_API_KEY=xxx python judge.py
     ```
 
 ---
@@ -153,5 +240,6 @@ vLLMサーバーを個別に管理し、予測と評価を別々に実行しま�
 
 ---
 
-## 🎯 推奨実行順序チャート
+## 🎯 ベースラインチャート
 <img width="1210" height="600" alt="image" src="https://github.com/user-attachments/assets/e5bf2573-c143-47bb-9735-d84888a5c986" />
+時間の都合上、DeepMATHのGRPO部分はできていないです。

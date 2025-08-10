@@ -145,7 +145,6 @@ def main(args: Config):
     # ラムダ関数を使ってデータセットをフィルタリング
     dataset = dataset.filter(lambda data: data['id'] in selected_ids_set)
 
-    # dataset = dataset.select(range(2))
     dataset = dataset.to_dict()
 
     # convert to list of json for async parallelism
@@ -157,7 +156,7 @@ def main(args: Config):
 
     timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    output_filepath = f"predictions/hle_Qwen3-32B-SFT-GRPO_20250810_054303.json"
+    output_filepath = f"predictions/hle/Qwen3-32B.json"
     # もしディレクトリがない場合は作成
     output_dir = os.path.dirname(output_filepath)
     if not os.path.exists(output_dir):
@@ -170,7 +169,7 @@ def main(args: Config):
         if os.path.exists(args.duplicate_file):
             with open(args.duplicate_file, "r") as f:
                 predictions = json.load(f)
-            unsolved_questions = [q for q in questions if q["id"] not in predictions]
+            unsolved_questions = [q for q in all_questions if q["id"] not in predictions]
         else:
             print("args.duplicate_fileの設定が間違っている")
 
@@ -193,7 +192,7 @@ def main(args: Config):
             
         print(f"Current progress saved: {len(predictions)} / {len(all_questions)} questions solved.")
         
-        unsolved_questions = [q for q in questions if q["id"] not in predictions]
+        unsolved_questions = [q for q in all_questions if q["id"] not in predictions]
 
     print(f"All {len(all_questions)} questions have been solved and saved.")
 
